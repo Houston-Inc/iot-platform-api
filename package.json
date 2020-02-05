@@ -1,0 +1,30 @@
+{
+  "name": "iot-platform-api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "npm install",
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Houston-Inc/iot-platform-api.git"
+  },
+  "keywords": [],
+  "dependencies": {
+    "@hapi/hapi": "^19.1.0",
+    "@hapi/inert": "^6.0.1",
+    "hapi-cors": "^1.0.3"
+  },
+  "engines": {
+    "node": "12.x"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Houston-Inc/iot-platform-api/issues"
+  },
+  "homepage": "https://github.com/Houston-Inc/iot-platform-api#readme"
+}
