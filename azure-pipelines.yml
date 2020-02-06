@@ -26,6 +26,7 @@ stages:
       name: getVersionNumber
   - job: Build
     displayName: Build
+    dependsOn: getVersionNumber
     pool:
       vmImage: 'ubuntu-latest'
     variables: 
