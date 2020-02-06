@@ -30,4 +30,4 @@ stages:
         dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
         containerRegistry: $(dockerRegistryServiceConnection)
         tags: |
-          $VERSION
+          $(VERSION)
