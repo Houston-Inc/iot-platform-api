@@ -21,7 +21,7 @@ stages:
       vmImage: 'ubuntu-latest'
     steps:
     - bash: |
-        echo "##vso[task.setvariable variable=version;isOutput=true]jq '.version' < package.json | sed 's/"//g'"
+        echo "##vso[task.setvariable variable=version;isOutput=true]$(jq '.version' < package.json | sed 's/"//g')"
       name: getVersionNumber
   - job: Build
     displayName: Build
