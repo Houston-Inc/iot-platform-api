@@ -3,7 +3,7 @@
 # https://docs.microsoft.com/azure/devops/pipelines/languages/docker
 
 trigger:
-- add-azure-devops-pipeline-for-container-build-and-push-to-acr
+- master
 
 resources:
 - repo: self
