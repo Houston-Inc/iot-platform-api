@@ -3,7 +3,7 @@
 # https://docs.microsoft.com/azure/devops/pipelines/languages/docker
 
 trigger:
-- master
+- add-azure-devops-pipeline-for-container-build-and-push-to-acr
 
 resources:
 - repo: self
@@ -20,6 +20,8 @@ stages:
     pool:
       vmImage: 'ubuntu-latest'
     steps:
+    - script: |
+        VERSION=$(jq '.version' < package.json | sed 's/"//g')
     - task: Docker@2
       displayName: Build and push an image to container registry
       inputs:
@@ -28,4 +30,4 @@ stages:
         dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
         containerRegistry: $(dockerRegistryServiceConnection)
         tags: |
-          $(Build.BuildId)
+          $VERSION
