@@ -4,7 +4,7 @@ const Hapi = require("@hapi/hapi");
 const SocketIO = require('socket.io');
 
 const init = async () => {
-    let data = [];
+    let data = {};
 
     const server = Hapi.server({
         port: process.env.PORT || 3000,
@@ -17,13 +17,13 @@ const init = async () => {
         socket.emit('sensorData', {
             data
         })
-        data.forEach(d => {
+        /*data.forEach(d => {
             socket.emit(d.address, {
                 temperature: d.temperature,
                 humidity: d.humidity,
                 pressure: d.pressure,
             })
-        });
+        });*/
     });
 
     server.route({
@@ -56,11 +56,11 @@ const init = async () => {
                 data: hookData
             })
 
-            hookData.forEach(data => {
+            /*hookData.forEach(data => {
                 io.emit(data.address, {
                     data
                 })
-            });
+            });*/
 
             const response = h.response();
             response.code(200);
