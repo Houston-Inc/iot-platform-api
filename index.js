@@ -2,6 +2,7 @@
 
 const Hapi = require("@hapi/hapi");
 const SocketIO = require('socket.io');
+const registerDevice = require('./registerDevice');
 
 const init = async () => {
     let data = [];
@@ -72,7 +73,44 @@ const init = async () => {
         method: "OPTIONS",
         path: "/webhook",
         handler: (request, h) => {
+            // console.log("--- WEBHOOK OPTIONS:")
+            // console.log("--- HEADERS:")
             // console.log(request.headers)
+            // console.log("--- PAYLOAD:")
+            // console.log(request.payload)
+            return h.response().code(200);
+        }
+    });
+
+    server.route({
+        method: "POST",
+        path: "/device-registration",
+        handler: (request, h) => {
+            const reqPayload = (process.env.EXEC_ENV === 'azure') ? request.payload : JSON.parse(request.payload);
+            const base64enc = reqPayload.data.body;
+            const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
+            const data = JSON.parse(utf8enc);
+
+            registerDevice(data.address, data.edgeDeviceId);
+            // console.log("--- device-registration POST:")
+            // console.log("--- HEADERS:")
+            // console.log(request.headers)
+            // console.log("--- PAYLOAD:")
+            // console.log(request.payload)
+
+            return h.response().code(200);
+        }
+    });
+
+    server.route({
+        method: "OPTIONS",
+        path: "/device-registration",
+        handler: (request, h) => {
+            // console.log("--- HEADERS:")
+            console.log("--- device-registration OPTIONS:")
+            console.log(request.headers)
+            // console.log("--- PAYLOAD:")
+            // console.log(request.payload)
             return h.response().code(200);
         }
     });
