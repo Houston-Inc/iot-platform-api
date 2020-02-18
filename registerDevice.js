@@ -141,7 +141,7 @@ const doRegister = (provisioningClient, symmetricKey) => {
 
 const sendEventToHub = (deviceState) => {
     const message = new Message(JSON.stringify(deviceState));
-    message.properties.add("type", "Microsoft.Devices.DeviceCreated");
+    message.properties.add("type", "DeviceRegistrationAttempted");
     apiDeviceHubClient.sendEvent(message, (err, res) => {
         if (err) {
             console.log(
