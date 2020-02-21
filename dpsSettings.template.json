@@ -1,0 +1,7 @@
+{
+    "provisioningHost": "global.azure-devices-provisioning.net",
+    "idScope": "",
+    "primaryKey": "",
+    "dpsConnectionString": "",
+    "edgeDeviceConnectionString": ""
+}
