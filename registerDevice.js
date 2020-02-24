@@ -18,28 +18,33 @@ const computeDerivedSymmetricKey = (masterKey, regId) => {
         .digest("base64");
 };
 
+class returnObject {
+    constructor(){
+        this.wasSuccessful = false;
+        this.registrationId = null;
+        this.edgeDeviceId = null;
+        this.message = MESSAGE.DEVICE_REGISTRATION_FAILURE;
+        this.deviceTwin = {};
+    }
+}
+
 const MESSAGE = {
     "TWIN_VALUE_FAILURE" : "Error retreiving twin value",
     "DEVICE_EXISTS" : "Device already exists",
     "DEVICE_REGISTRATION_FAILURE": "Error registering the device",
     "HUB_CONNECTION_ERROR": "Error connecting to IoT Hub",
     "SENDING_HUB_MESSAGE_ERROR": "Error sending message to IoT Hub",
-    "GENERIC_SUCCESS": "Registeration successful"
-}
-
-const baseReturnObject = {
-    wasSuccessful: false,
-    registerationId: null,
-    edgeDeviceId: null,
-    message: MESSAGE.DEVICE_REGISTRATION_FAILURE,
-    deviceTwin: {}
+    "GENERIC_SUCCESS": "Registration successful"
 }
 
 let apiDeviceHubClient = Client.fromConnectionString(edgeDeviceConnectionString, iotHubTransport);
 
 
 const registerDevice = async (registrationId, edgeDeviceId) => {
-    baseReturnObject.registerationId = registrationId;
+
+    const baseReturnObject = new returnObject();
+
+    baseReturnObject.registrationId = registrationId;
     baseReturnObject.edgeDeviceId = edgeDeviceId;
     const serviceClient = provisioningServiceClient.fromConnectionString(dpsConnectionString);
     const symmetricKey = computeDerivedSymmetricKey(primaryKey, registrationId);
@@ -55,9 +60,8 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
 
     serviceClient.getDeviceRegistrationState(registrationId)
         .then(res => {
-            const response = baseReturnObject;
-            response.message = MESSAGE.DEVICE_EXISTS;
-            deviceState = response;
+            baseReturnObject.message = MESSAGE.DEVICE_EXISTS;
+            deviceState = baseReturnObject;
         })
         .catch(async err => {
             console.log("errr?");
@@ -65,7 +69,7 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
             const error = JSON.parse(err.responseBody);
 
             if (error.message === "Registration not found.") {
-                const registerResult = await doRegister(provisioningClient, symmetricKey);
+                const registerResult = await doRegister(provisioningClient, symmetricKey, baseReturnObject);
                 console.log("registerresult: ", registerResult);
                 deviceState = registerResult;
             } else {
@@ -74,13 +78,13 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
                 // return err.responseBody;
             }
         }).finally(()=>{
-            sendEventToHub(deviceState)
+            sendEventToHub(deviceState, baseReturnObject)
         });
     return deviceState;
 };
 
 
-const doRegister = (provisioningClient, symmetricKey) => {
+const doRegister = (provisioningClient, symmetricKey, baseReturnObject) => {
     return new Promise((resolve, reject) => {
         provisioningClient.register((err, result) => {
             if (err) {
@@ -103,27 +107,24 @@ const doRegister = (provisioningClient, symmetricKey) => {
                 hubClient.open(err => {
                     if (err) {
                         console.error("Could not connect: " + err.message);
-                        const response = baseReturnObject;
-                        response.message = MESSAGE.HUB_CONNECTION_ERROR;
-                        reject(response);
+                        baseReturnObject.message = MESSAGE.HUB_CONNECTION_ERROR;
+                        reject(baseReturnObject);
                     } else {
                         // DEVICE TWIN
                         const getTwinPromise = new Promise((resl, rej) => {
                             hubClient.getTwin((err, twin) => {
                                 if (err) {
                                     console.error("error getting twin: " + err);
-                                    const response = baseReturnObject;
-                                    response.message = MESSAGE.TWIN_VALUE_FAILURE;
-                                    rej(response);
+                                    baseReturnObject.message = MESSAGE.TWIN_VALUE_FAILURE;
+                                    rej(baseReturnObject);
                                 }
                                 // Output the current properties
                                 console.log("Device twin content:");
                                 console.log(twin.properties);
-                                const response = baseReturnObject;
-                                response.message = MESSAGE.GENERIC_SUCCESS;
-                                response.wasSuccessful = true;
-                                response.deviceTwin = twin.properties.desired;
-                                resl(response);
+                                baseReturnObject.message = MESSAGE.GENERIC_SUCCESS;
+                                baseReturnObject.wasSuccessful = true;
+                                baseReturnObject.deviceTwin = twin.properties.desired;
+                                resl(baseReturnObject);
                             });
                         });
 
@@ -139,7 +140,7 @@ const doRegister = (provisioningClient, symmetricKey) => {
 };
 
 
-const sendEventToHub = (deviceState) => {
+const sendEventToHub = (deviceState, baseReturnObject) => {
     const message = new Message(JSON.stringify(deviceState));
     message.properties.add("type", "DeviceRegistrationAttempted");
     apiDeviceHubClient.sendEvent(message, (err, res) => {
@@ -147,15 +148,13 @@ const sendEventToHub = (deviceState) => {
             console.log(
                 "Error sending registration message: " + err.toString()
             );
-            const response = baseReturnObject;
-            response.message = MESSAGE.SENDING_HUB_MESSAGE_ERROR;
+            baseReturnObject.message = MESSAGE.SENDING_HUB_MESSAGE_ERROR;
         }
 
         if (res) {
             console.log("Sent registration message", res);
-            const response = baseReturnObject;
-            response.message = MESSAGE.GENERIC_SUCCESS;
-            response.wasSuccessful = true;
+            baseReturnObject.message = MESSAGE.GENERIC_SUCCESS;
+            baseReturnObject.wasSuccessful = true;
         }
         apiDeviceHubClient.close();                            
     })
