@@ -56,29 +56,25 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
         provisioningSecurityClient
     );
 
+    //serviceClient.deleteIndividualEnrollment('testbla4');
+
     let deviceState;
 
-    serviceClient.getDeviceRegistrationState(registrationId)
+    await serviceClient.getDeviceRegistrationState(registrationId)
         .then(res => {
             baseReturnObject.message = MESSAGE.DEVICE_EXISTS;
             deviceState = baseReturnObject;
         })
         .catch(async err => {
-            console.log("errr?");
-            console.log(err.responseBody);
             const error = JSON.parse(err.responseBody);
-
             if (error.message === "Registration not found.") {
                 const registerResult = await doRegister(provisioningClient, symmetricKey, baseReturnObject);
-                console.log("registerresult: ", registerResult);
                 deviceState = registerResult;
             } else {
-                console.log("err1");
                 deviceState = baseReturnObject;
-                // return err.responseBody;
             }
         }).finally(()=>{
-            sendEventToHub(deviceState, baseReturnObject)
+            sendEventToHub(deviceState)
         });
     return deviceState;
 };
@@ -88,12 +84,8 @@ const doRegister = (provisioningClient, symmetricKey, baseReturnObject) => {
     return new Promise((resolve, reject) => {
         provisioningClient.register((err, result) => {
             if (err) {
-                console.log("error registering device: " + err);
                 reject(baseReturnObject);
             } else {
-                console.log("result: ");
-                console.log(result);
-
                 const connectionString =
                     "HostName=" +
                     result.assignedHub +
@@ -106,7 +98,6 @@ const doRegister = (provisioningClient, symmetricKey, baseReturnObject) => {
 
                 hubClient.open(err => {
                     if (err) {
-                        console.error("Could not connect: " + err.message);
                         baseReturnObject.message = MESSAGE.HUB_CONNECTION_ERROR;
                         reject(baseReturnObject);
                     } else {
@@ -140,21 +131,12 @@ const doRegister = (provisioningClient, symmetricKey, baseReturnObject) => {
 };
 
 
-const sendEventToHub = (deviceState, baseReturnObject) => {
+const sendEventToHub = (deviceState) => {
     const message = new Message(JSON.stringify(deviceState));
     message.properties.add("type", "DeviceRegistrationAttempted");
     apiDeviceHubClient.sendEvent(message, (err, res) => {
         if (err) {
-            console.log(
-                "Error sending registration message: " + err.toString()
-            );
-            baseReturnObject.message = MESSAGE.SENDING_HUB_MESSAGE_ERROR;
-        }
-
-        if (res) {
-            console.log("Sent registration message", res);
-            baseReturnObject.message = MESSAGE.GENERIC_SUCCESS;
-            baseReturnObject.wasSuccessful = true;
+            console.log("Error sending registration message: " + err.toString());
         }
         apiDeviceHubClient.close();                            
     })

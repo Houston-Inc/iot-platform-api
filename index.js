@@ -5,6 +5,18 @@ const SocketIO = require('socket.io');
 const registerDevice = require('./registerDevice');
 const { Client } = require('pg')
 
+/*
+const config = {
+    host: 'iot-platform-postgresql.postgres.database.azure.com',
+    // Do not hard code your username and password.
+    // Consider using Node environment variables.
+    user: 'psql_user@iot-platform-postgresql',     
+    password: 'generic_password',
+    database: 'iot',
+    port: 5432,
+    ssl: true
+};
+*/
 const init = async () => {
     let data = [];
 
@@ -32,6 +44,7 @@ const init = async () => {
         method: "GET",
         path: "/",
         handler: (request, h) => {
+            console.log('Get API');
             return "api";
         }
     });
@@ -57,13 +70,12 @@ const init = async () => {
             io.emit('sensorData', {
                 data: hookData
             })
-
+            /*
             hookData.forEach(data => {
                 io.emit(data.address, {
                     data
                 })
-            });
-
+            });*/
             const response = h.response();
             response.code(200);
             return response;
@@ -91,25 +103,24 @@ const init = async () => {
             const base64enc = reqPayload.data.body;
             const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
             const data = JSON.parse(utf8enc);
-            const client = new Client();
-            //insert edge device
-            await client.connect();
-            const edge_res = await client.query('INSERT INTO edge_devices(id) values($1)', [data.edgeDeviceId]);
-            await client.end();
-            
-            const registration = registerDevice(data.address, data.edgeDeviceId);
-            if(registration.wasSuccessful) {
+            let client = new Client(config);
+            try {
                 await client.connect();
-                const res = await client.query('SELECT NOW()');
+                const res = await client.query('INSERT INTO edge_devices(id) values($1)', [data.edgeDeviceId]);
+            } catch(ex) {
+                console.log(ex);
+            } finally {
                 await client.end();
             }
-
-            // console.log("--- device-registration POST:")
-            // console.log("--- HEADERS:")
-            // console.log(request.headers)
-            // console.log("--- PAYLOAD:")
-            // console.log(request.payload)
-
+            
+            registerDevice(data.address, data.edgeDeviceId).then(async value => {
+                if(value.wasSuccessful) {
+                    client = new Client();
+                    await client.connect();
+                    const res = await client.query('INSERT INTO iot_devices(id, edge_device_id) values($1, $2)', [value.registrationId, value.edgeDeviceId]);
+                    await client.end();
+                }
+            });
             return h.response().code(200);
         }
     });
