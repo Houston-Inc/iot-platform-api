@@ -205,6 +205,33 @@ const init = async () => {
     });
 
     server.route({
+        method: "DELETE",
+        path: "/api/devices",
+        config: {
+            cors: {
+                "origin": ['*']
+            }
+        },
+        handler: async (request, h) => {
+            const {id} = request.payload;
+            const response = h.response();
+            try {
+                const client = new Client();
+                await client.connect();
+                const sqlres = await client.query("DELETE FROM iot_devices WHERE ID = $1", [id]);
+                await client.end();
+            }
+            catch(ex) {
+                console.log(ex);
+                response.code(400);
+                return response;
+            }
+            response.code(200);
+            return response;
+        }
+    });
+
+    server.route({
         method: "GET",
         path: "/api/edges",
         config: {
@@ -235,15 +262,53 @@ const init = async () => {
             }
         },
         handler: async (request, h) => {
-            //return ({ addresses: data.map(({ address }) => address) });
-            const client = new Client();
-            await client.connect();
-            const sqlres = await client.query("Select id from iot_edge_devices;");
-            await client.end();
+            const {data} = request.payload;
+            const response = h.response();
 
-            const response = h.response(sqlres.rows);
-            response.code(200)
-            response.type("application/json");
+            try {
+                const client = new Client();
+                await client.connect();
+                const sqlres = await client.query("INSERT INTO edge_devices(id) VALUES($1)", [data]);
+                await client.end();
+            }
+            catch(ex) {
+                console.log(ex);
+                if(ex.detail && ex.detail.includes("already exists")) {
+                    response.code(409);
+                } else {
+                    response.code(400);
+                }
+                return response;
+            }
+            response.code(200);
+            return response;
+        }
+    });
+
+
+    server.route({
+        method: "DELETE",
+        path: "/api/edges",
+        config: {
+            cors: {
+                "origin": ['*']
+            }
+        },
+        handler: async (request, h) => {
+            const {id} = request.payload;
+            const response = h.response();
+            try {
+                const client = new Client();
+                await client.connect();
+                const sqlres = await client.query("DELETE FROM edge_devices WHERE ID = $1", [id]);
+                await client.end();
+            }
+            catch(ex) {
+                console.log(ex);
+                response.code(400);
+                return response;
+            }
+            response.code(200);
             return response;
         }
     });
