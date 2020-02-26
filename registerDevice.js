@@ -34,6 +34,7 @@ const MESSAGE = {
     "DEVICE_REGISTRATION_FAILURE": "Error registering the device",
     "HUB_CONNECTION_ERROR": "Error connecting to IoT Hub",
     "SENDING_HUB_MESSAGE_ERROR": "Error sending message to IoT Hub",
+    "DEVICE_DOES_NOT_EXISTS": "IoT or Edge Device does not exists in database or IoT device is already assigned.",
     "GENERIC_SUCCESS": "Registration successful"
 }
 
@@ -142,4 +143,13 @@ const sendEventToHub = (deviceState) => {
     })
 }
 
-module.exports = registerDevice;
+const sendDeviceDoesNotExist = () => {
+    const obj = new baseReturnObject();
+    obj.message = MESSAGE.DEVICE_DOES_NOT_EXISTS;
+    sendEventToHub(obj);
+}
+
+module.exports = {
+    registerDevice,
+    sendDeviceDoesNotExist
+};

@@ -2,21 +2,9 @@
 
 const Hapi = require("@hapi/hapi");
 const SocketIO = require('socket.io');
-const registerDevice = require('./registerDevice');
+const {registerDevice, sendDeviceDoesNotExist} = require('./registerDevice');
 const { Client } = require('pg')
 
-/*
-const config = {
-    host: 'iot-platform-postgresql.postgres.database.azure.com',
-    // Do not hard code your username and password.
-    // Consider using Node environment variables.
-    user: 'psql_user@iot-platform-postgresql',
-    password: 'generic_password',
-    database: 'iot',
-    port: 5432,
-    ssl: true
-};
-*/
 const init = async () => {
     let data = [];
 
@@ -104,30 +92,20 @@ const init = async () => {
             const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
             const data = JSON.parse(utf8enc);
 
-            let client = new Client(config);
+            let client = new Client();
             await client.connect();
-
-            const addressAvailableSql = await client.query('SELECT id from iot_devices where id = $1 and edge_device_id is null', [data.address]);
+            const addressAvailableSql = await client.query('SELECT i.id FROM iot_devices i WHERE i.id=$1 AND i.edge_device_id IS NULL AND EXISTS(SELECT e.id FROM edge_devices e WHERE e.id=$2);', [data.address, data.edgeDeviceId]);
             if(addressAvailableSql.rows.length === 1) {
-                try {
-                        //insert edge device
-                        const edge_res = await client.query('INSERT INTO edge_devices(id) values($1)', [data.edgeDeviceId]);
-                } catch(ex) {
-                    console.log(ex);
-                } finally {
-                    await client.end();
-                }
-
                 registerDevice(data.address, data.edgeDeviceId).then(async value => {
                     if(value.wasSuccessful) {
                         client = new Client();
                         await client.connect();
-                        const res = await client.query('INSERT INTO iot_devices(id, edge_device_id) values($1, $2)', [value.registrationId, value.edgeDeviceId]);
+                        const res = await client.query('UPDATE iot_devices SET edge_device_id = $1 WHERE id = $2', [value.edgeDeviceId, value.registrationId]);
                         await client.end();
                     }
                 });
             } else {
-
+                sendDeviceDoesNotExist();
             }
             return h.response().code(200);
         }
