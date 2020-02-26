@@ -2,7 +2,7 @@
 
 const Hapi = require("@hapi/hapi");
 const SocketIO = require('socket.io');
-const {registerDevice, sendDeviceDoesNotExist} = require('./registerDevice');
+const {registerDevice, sendDeviceDoesNotExist, sendDebugToHub} = require('./registerDevice');
 const { Client } = require('pg')
 
 const init = async () => {
@@ -19,13 +19,6 @@ const init = async () => {
         socket.emit('sensorData', {
             data
         })
-        data.forEach(d => {
-            socket.emit(d.address, {
-                temperature: d.temperature,
-                humidity: d.humidity,
-                pressure: d.pressure,
-            })
-        });
     });
 
     server.route({
@@ -92,19 +85,22 @@ const init = async () => {
             const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
             const data = JSON.parse(utf8enc);
 
-            let client = new Client();
+            let client = new Client({ ssl: true });
             await client.connect();
             const addressAvailableSql = await client.query('SELECT i.id FROM iot_devices i WHERE i.id=$1 AND i.edge_device_id IS NULL AND EXISTS(SELECT e.id FROM edge_devices e WHERE e.id=$2);', [data.address, data.edgeDeviceId]);
             if(addressAvailableSql.rows.length === 1) {
                 registerDevice(data.address, data.edgeDeviceId).then(async value => {
+                    sendDebugToHub({msg: "registered device", address: data.address, success: value.wasSuccessful})
                     if(value.wasSuccessful) {
-                        client = new Client();
+                        client = new Client({ ssl: true });
                         await client.connect();
                         const res = await client.query('UPDATE iot_devices SET edge_device_id = $1 WHERE id = $2', [value.edgeDeviceId, value.registrationId]);
                         await client.end();
                     }
                 });
             } else {
+                // iot_device id in db === data.address AND iot_edge_device === data.edgeDeviceId
+                // then send reqistration wasSuccess true
                 sendDeviceDoesNotExist();
             }
             return h.response().code(200);

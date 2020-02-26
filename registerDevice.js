@@ -38,9 +38,6 @@ const MESSAGE = {
     "GENERIC_SUCCESS": "Registration successful"
 }
 
-let apiDeviceHubClient = Client.fromConnectionString(edgeDeviceConnectionString, iotHubTransport);
-
-
 const registerDevice = async (registrationId, edgeDeviceId) => {
 
     const baseReturnObject = new returnObject();
@@ -76,8 +73,9 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
             }
         }).finally(()=>{
             sendEventToHub(deviceState)
+            return deviceState;
+
         });
-    return deviceState;
 };
 
 
@@ -131,15 +129,17 @@ const doRegister = (provisioningClient, symmetricKey, baseReturnObject) => {
     });
 };
 
+const apiDeviceHubClient = Client.fromConnectionString(edgeDeviceConnectionString, iotHubTransport);
 
 const sendEventToHub = (deviceState) => {
+    // const apiDeviceHubClient = Client.fromConnectionString(edgeDeviceConnectionString, iotHubTransport);
     const message = new Message(JSON.stringify(deviceState));
     message.properties.add("type", "DeviceRegistrationAttempted");
     apiDeviceHubClient.sendEvent(message, (err, res) => {
         if (err) {
             console.log("Error sending registration message: " + err.toString());
         }
-        apiDeviceHubClient.close();                            
+        // apiDeviceHubClient.close();
     })
 }
 
@@ -149,7 +149,20 @@ const sendDeviceDoesNotExist = () => {
     sendEventToHub(obj);
 }
 
+const sendDebugToHub = obj => {
+    // const apiDeviceHubClient = Client.fromConnectionString(edgeDeviceConnectionString, iotHubTransport);
+    const message = new Message(JSON.stringify(obj));
+    message.properties.add("type", "Debug");
+    apiDeviceHubClient.sendEvent(message, (err, res) => {
+        if (err) {
+            console.log("Error sending debug message: " + err.toString());
+        }
+        // apiDeviceHubClient.close();                            
+    })
+}
+
 module.exports = {
     registerDevice,
-    sendDeviceDoesNotExist
+    sendDeviceDoesNotExist,
+    sendDebugToHub
 };
