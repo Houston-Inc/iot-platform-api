@@ -133,7 +133,7 @@ const init = async () => {
             }
         },
         handler: async (request, h) => {
-            const client = new Client();
+            const client = new Client({ ssl: true });
             await client.connect();
             const sqlres = await client.query("Select id, address, edge_device_id from iot_devices;");
             await client.end();
@@ -159,7 +159,7 @@ const init = async () => {
 
             //console.log(data);
             try {
-                const client = new Client();
+                const client = new Client({ ssl: true });
                 await client.connect();
                 const sqlres = await client.query("INSERT INTO iot_devices(id) VALUES($1)", [data]);
                 await client.end();
@@ -194,7 +194,7 @@ const init = async () => {
             const {id} = request.payload;
             const response = h.response();
             try {
-                const client = new Client();
+                const client = new Client({ ssl: true });
                 await client.connect();
                 const sqlres = await client.query("DELETE FROM iot_devices WHERE ID = $1", [id]);
                 await client.end();
@@ -219,7 +219,7 @@ const init = async () => {
         },
         handler: async (request, h) => {
             //return ({ addresses: data.map(({ address }) => address) });
-            const client = new Client();
+            const client = new Client({ ssl: true });
             await client.connect();
             const sqlres = await client.query("Select id from edge_devices;");
             await client.end();
@@ -244,7 +244,7 @@ const init = async () => {
             const response = h.response();
 
             try {
-                const client = new Client();
+                const client = new Client({ ssl: true });
                 await client.connect();
                 const sqlres = await client.query("INSERT INTO edge_devices(id) VALUES($1)", [data]);
                 await client.end();
@@ -276,7 +276,7 @@ const init = async () => {
             const {id} = request.payload;
             const response = h.response();
             try {
-                const client = new Client();
+                const client = new Client({ ssl: true });
                 await client.connect();
                 const sqlres = await client.query("DELETE FROM edge_devices WHERE ID = $1", [id]);
                 await client.end();
