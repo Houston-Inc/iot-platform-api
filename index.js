@@ -2,7 +2,7 @@
 
 const Hapi = require("@hapi/hapi");
 const SocketIO = require('socket.io');
-const {registerDevice, sendDeviceDoesNotExist, sendDebugToHub} = require('./registerDevice');
+const {registerDevice, sendDeviceDoesNotExist } = require('./registerDevice');
 const { Client } = require('pg')
 
 const init = async () => {
@@ -25,7 +25,6 @@ const init = async () => {
         method: "GET",
         path: "/",
         handler: (request, h) => {
-            console.log('Get API');
             return "api";
         }
     });
@@ -51,12 +50,7 @@ const init = async () => {
             io.emit('sensorData', {
                 data: hookData
             })
-            /*
-            hookData.forEach(data => {
-                io.emit(data.address, {
-                    data
-                })
-            });*/
+            
             const response = h.response();
             response.code(200);
             return response;
@@ -90,7 +84,8 @@ const init = async () => {
             const addressAvailableSql = await client.query('SELECT i.id FROM iot_devices i WHERE i.id=$1 AND i.edge_device_id IS NULL AND EXISTS(SELECT e.id FROM edge_devices e WHERE e.id=$2);', [data.address, data.edgeDeviceId]);
             if(addressAvailableSql.rows.length === 1) {
                 registerDevice(data.address, data.edgeDeviceId).then(async value => {
-                    sendDebugToHub({msg: "registered device", address: data.address, success: value.wasSuccessful})
+                    console.log('After registering the device with the callback, the returned values is ', value);
+                    console.log('updating the iot_device in the db');
                     if(value.wasSuccessful) {
                         client = new Client({ ssl: true });
                         await client.connect();
@@ -99,8 +94,6 @@ const init = async () => {
                     }
                 });
             } else {
-                // iot_device id in db === data.address AND iot_edge_device === data.edgeDeviceId
-                // then send reqistration wasSuccess true
                 sendDeviceDoesNotExist();
             }
             return h.response().code(200);
@@ -152,17 +145,11 @@ const init = async () => {
         handler: async (request, h) => {
             const {data} = request.payload;
             const response = h.response();
-
-            //console.log(data);
             try {
                 const client = new Client({ ssl: true });
                 await client.connect();
                 const sqlres = await client.query("INSERT INTO iot_devices(id) VALUES($1)", [data]);
                 await client.end();
-
-                //console.log(request.payload);
-
-
             }
             catch(ex) {
                 console.log(ex);
@@ -214,7 +201,6 @@ const init = async () => {
             }
         },
         handler: async (request, h) => {
-            //return ({ addresses: data.map(({ address }) => address) });
             const client = new Client({ ssl: true });
             await client.connect();
             const sqlres = await client.query("Select id from edge_devices;");

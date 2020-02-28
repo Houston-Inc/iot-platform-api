@@ -54,11 +54,10 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
         provisioningSecurityClient
     );
 
-    //serviceClient.deleteIndividualEnrollment('testbla4');
-
     let deviceState;
 
-    await serviceClient.getDeviceRegistrationState(registrationId)
+    return new Promise((resolve, reject) => 
+        serviceClient.getDeviceRegistrationState(registrationId)
         .then(res => {
             baseReturnObject.message = MESSAGE.DEVICE_EXISTS;
             deviceState = baseReturnObject;
@@ -71,11 +70,13 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
             } else {
                 deviceState = baseReturnObject;
             }
-        }).finally(()=>{
-            sendEventToHub(deviceState)
-            return deviceState;
-
-        });
+        }).finally(async ()=>{
+            const eventToHub = sendEventToHub(deviceState);
+            eventToHub.then((dState) => {
+                resolve(dState);
+            }).catch(err => {
+            });
+        }));
 };
 
 
@@ -92,9 +93,7 @@ const doRegister = (provisioningClient, symmetricKey, baseReturnObject) => {
                     result.deviceId +
                     ";SharedAccessKey=" +
                     symmetricKey;
-
-                hubClient = Client.fromConnectionString(connectionString, iotHubTransport);
-
+                const hubClient = Client.fromConnectionString(connectionString, iotHubTransport);
                 hubClient.open(err => {
                     if (err) {
                         baseReturnObject.message = MESSAGE.HUB_CONNECTION_ERROR;
@@ -129,40 +128,31 @@ const doRegister = (provisioningClient, symmetricKey, baseReturnObject) => {
     });
 };
 
-const apiDeviceHubClient = Client.fromConnectionString(edgeDeviceConnectionString, iotHubTransport);
 
 const sendEventToHub = (deviceState) => {
-    // const apiDeviceHubClient = Client.fromConnectionString(edgeDeviceConnectionString, iotHubTransport);
+    console.log('send event to hub with the device state : ', deviceState);
+    const apiDeviceHubClient = Client.fromConnectionString(edgeDeviceConnectionString, iotHubTransport);
     const message = new Message(JSON.stringify(deviceState));
     message.properties.add("type", "DeviceRegistrationAttempted");
-    apiDeviceHubClient.sendEvent(message, (err, res) => {
-        if (err) {
-            console.log("Error sending registration message: " + err.toString());
-        }
-        // apiDeviceHubClient.close();
-    })
-}
 
+    return new Promise((resolve, reject) => {
+        apiDeviceHubClient.sendEvent(message, (err, res) => {
+            if (err) {
+                console.log("Error sending registration message: " + err.toString());
+                reject(err);
+            }
+            resolve(deviceState);
+        })
+    });
+}
 const sendDeviceDoesNotExist = () => {
     const obj = new baseReturnObject();
     obj.message = MESSAGE.DEVICE_DOES_NOT_EXISTS;
     sendEventToHub(obj);
 }
 
-const sendDebugToHub = obj => {
-    // const apiDeviceHubClient = Client.fromConnectionString(edgeDeviceConnectionString, iotHubTransport);
-    const message = new Message(JSON.stringify(obj));
-    message.properties.add("type", "Debug");
-    apiDeviceHubClient.sendEvent(message, (err, res) => {
-        if (err) {
-            console.log("Error sending debug message: " + err.toString());
-        }
-        // apiDeviceHubClient.close();                            
-    })
-}
 
 module.exports = {
     registerDevice,
     sendDeviceDoesNotExist,
-    sendDebugToHub
 };
