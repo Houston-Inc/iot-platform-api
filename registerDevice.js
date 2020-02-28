@@ -11,6 +11,8 @@ const provisioningServiceClient = require("azure-iot-provisioning-service")
 
 const { provisioningHost, idScope, primaryKey, dpsConnectionString, edgeDeviceConnectionString } = require("./dpsSettings.json");
 
+const mockRegister = process.env.MOCKREGISTER;
+
 const computeDerivedSymmetricKey = (masterKey, regId) => {
     return crypto
         .createHmac("SHA256", Buffer.from(masterKey, "base64"))
@@ -39,7 +41,6 @@ const MESSAGE = {
 }
 
 const registerDevice = async (registrationId, edgeDeviceId) => {
-
     const baseReturnObject = new returnObject();
 
     baseReturnObject.registrationId = registrationId;
@@ -56,27 +57,48 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
 
     let deviceState;
 
-    return new Promise((resolve, reject) => 
-        serviceClient.getDeviceRegistrationState(registrationId)
-        .then(res => {
-            baseReturnObject.message = MESSAGE.DEVICE_EXISTS;
-            deviceState = baseReturnObject;
-        })
-        .catch(async err => {
-            const error = JSON.parse(err.responseBody);
-            if (error.message === "Registration not found.") {
-                const registerResult = await doRegister(provisioningClient, symmetricKey, baseReturnObject);
-                deviceState = registerResult;
-            } else {
-                deviceState = baseReturnObject;
-            }
-        }).finally(async ()=>{
-            const eventToHub = sendEventToHub(deviceState);
-            eventToHub.then((dState) => {
-                resolve(dState);
-            }).catch(err => {
-            });
-        }));
+    return new Promise((resolve, reject) => {
+        if (mockRegister) {
+            baseReturnObject.wasSuccessful = true;
+            console.log("MOCKING REGISTRATION: ", baseReturnObject);
+            const eventToHub = sendEventToHub(baseReturnObject);
+            eventToHub
+                .then(dState => {
+                    resolve(baseReturnObject);
+                })
+                .catch(err => {
+                    console.log("error mock register: ", err);
+                });
+        } else {
+            serviceClient
+                .getDeviceRegistrationState(registrationId)
+                .then(res => {
+                    baseReturnObject.message = MESSAGE.DEVICE_EXISTS;
+                    deviceState = baseReturnObject;
+                })
+                .catch(async err => {
+                    const error = JSON.parse(err.responseBody);
+                    if (error.message === "Registration not found.") {
+                        const registerResult = await doRegister(
+                            provisioningClient,
+                            symmetricKey,
+                            baseReturnObject
+                        );
+                        deviceState = registerResult;
+                    } else {
+                        deviceState = baseReturnObject;
+                    }
+                })
+                .finally(async () => {
+                    const eventToHub = sendEventToHub(deviceState);
+                    eventToHub
+                        .then(dState => {
+                            resolve(dState);
+                        })
+                        .catch(err => {});
+                });
+        }
+    });
 };
 
 
@@ -141,6 +163,7 @@ const sendEventToHub = (deviceState) => {
                 console.log("Error sending registration message: " + err.toString());
                 reject(err);
             }
+            console.log("going to resolve sendEventToHub");
             resolve(deviceState);
         })
     });

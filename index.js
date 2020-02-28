@@ -193,6 +193,33 @@ const init = async () => {
     });
 
     server.route({
+        method: "PUT",
+        path: "/api/devices",
+        config: {
+            cors: {
+                "origin": ['*']
+            }
+        },
+        handler: async (request, h) => {
+            const {id} = request.payload;
+            const response = h.response();
+            try {
+                const client = new Client({ ssl: true });
+                await client.connect();
+                const sqlres = await client.query("UPDATE iot_devices SET edge_device_id = null WHERE ID = $1", [id]);
+                await client.end();
+            }
+            catch(ex) {
+                console.log(ex);
+                response.code(400);
+                return response;
+            }
+            response.code(200);
+            return response;
+        }
+    });
+
+    server.route({
         method: "GET",
         path: "/api/edges",
         config: {
