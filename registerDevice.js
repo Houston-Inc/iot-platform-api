@@ -169,7 +169,7 @@ const sendEventToHub = (deviceState) => {
     });
 }
 const sendDeviceDoesNotExist = () => {
-    const obj = new baseReturnObject();
+    const obj = new returnObject();
     obj.message = MESSAGE.DEVICE_DOES_NOT_EXISTS;
     sendEventToHub(obj);
 }
