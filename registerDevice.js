@@ -73,6 +73,7 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
             serviceClient
                 .getDeviceRegistrationState(registrationId)
                 .then(res => {
+                    console.log("serviceClientGetState: ", res);
                     baseReturnObject.message = MESSAGE.DEVICE_EXISTS;
                     deviceState = baseReturnObject;
                 })
@@ -108,6 +109,11 @@ const doRegister = (provisioningClient, symmetricKey, baseReturnObject) => {
             if (err) {
                 reject(baseReturnObject);
             } else {
+
+                
+                //TODO DO DATABASE UPDATE HERE
+
+                
                 const connectionString =
                     "HostName=" +
                     result.assignedHub +

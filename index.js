@@ -40,12 +40,13 @@ const init = async () => {
 
     server.route({
         method: "POST",
-        path: "/webhook",
+        path: "/telemetry",
         handler: (request, h) => {
             const base64enc = request.payload.data.body;
             const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
             const hookData = JSON.parse(utf8enc);
             data = hookData;
+            console.log('DATA in TELEMETRY' , data);
 
             io.emit('sensorData', {
                 data: hookData
@@ -59,11 +60,11 @@ const init = async () => {
 
     server.route({
         method: "OPTIONS",
-        path: "/webhook",
+        path: "/telemetry",
         handler: (request, h) => {
             // console.log("--- WEBHOOK OPTIONS:")
             // console.log("--- HEADERS:")
-            // console.log(request.headers)
+            console.log(request.headers)
             // console.log("--- PAYLOAD:")
             // console.log(request.payload)
             return h.response().code(200);
@@ -193,20 +194,26 @@ const init = async () => {
     });
 
     server.route({
-        method: "PUT",
-        path: "/api/devices",
+        method: "POST",
+        path: "/api/device-update",
         config: {
             cors: {
                 "origin": ['*']
             }
         },
         handler: async (request, h) => {
-            const {id} = request.payload;
+            console.log(request.payload);
+            const reqPayload = (process.env.EXEC_ENV === 'azure') ? request.payload : JSON.parse(request.payload);
+            const base64enc = reqPayload.data.body;
+            const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
+            const data = JSON.parse(utf8enc);
+            const {iotDeviceId, edgeDeviceId} = data;
+            
             const response = h.response();
             try {
                 const client = new Client({ ssl: true });
                 await client.connect();
-                const sqlres = await client.query("UPDATE iot_devices SET edge_device_id = null WHERE ID = $1", [id]);
+                const sqlres = await client.query("UPDATE iot_devices SET edge_device_id = $1 WHERE id = $2", [edgeDeviceId, iotDeviceId]);
                 await client.end();
             }
             catch(ex) {
@@ -216,6 +223,15 @@ const init = async () => {
             }
             response.code(200);
             return response;
+        }
+    });
+
+    server.route({
+        method: "OPTIONS",
+        path: "/api/device-update",
+        handler: (request, h) => {
+            console.log(request.headers)
+            return h.response().code(200);
         }
     });
 
