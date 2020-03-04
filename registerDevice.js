@@ -45,7 +45,6 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
 
     baseReturnObject.registrationId = registrationId;
     baseReturnObject.edgeDeviceId = edgeDeviceId;
-    const serviceClient = provisioningServiceClient.fromConnectionString(dpsConnectionString);
     const symmetricKey = computeDerivedSymmetricKey(primaryKey, registrationId);
     const provisioningSecurityClient = new SymmetricKeySecurityClient(registrationId, symmetricKey);
     const provisioningClient = ProvisioningDeviceClient.create(
@@ -55,9 +54,7 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
         provisioningSecurityClient
     );
 
-    let deviceState;
-
-    return new Promise((resolve, reject) => {
+    return new Promise( async(resolve, reject) => {
         if (mockRegister) {
             baseReturnObject.wasSuccessful = true;
             console.log("MOCKING REGISTRATION: ", baseReturnObject);
@@ -70,34 +67,18 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
                     console.log("error mock register: ", err);
                 });
         } else {
-            serviceClient
-                .getDeviceRegistrationState(registrationId)
-                .then(res => {
-                    console.log("serviceClientGetState: ", res);
-                    baseReturnObject.message = MESSAGE.DEVICE_EXISTS;
-                    deviceState = baseReturnObject;
+            const registerResult = await doRegister(
+                provisioningClient,
+                symmetricKey,
+                baseReturnObject
+            );
+            const eventToHub = sendEventToHub(registerResult);
+            eventToHub
+                .then(deviceState => {
+                    resolve(deviceState);
                 })
-                .catch(async err => {
-                    const error = JSON.parse(err.responseBody);
-                    if (error.message === "Registration not found.") {
-                        const registerResult = await doRegister(
-                            provisioningClient,
-                            symmetricKey,
-                            baseReturnObject
-                        );
-                        deviceState = registerResult;
-                    } else {
-                        deviceState = baseReturnObject;
-                    }
-                })
-                .finally(async () => {
-                    const eventToHub = sendEventToHub(deviceState);
-                    eventToHub
-                        .then(dState => {
-                            resolve(dState);
-                        })
-                        .catch(err => {});
-                });
+                .catch(err => {});
+
         }
     });
 };
@@ -174,14 +155,26 @@ const sendEventToHub = (deviceState) => {
         })
     });
 }
-const sendDeviceDoesNotExist = () => {
+const sendDeviceDoesNotExist = (registrationId, edgeDeviceId) => {
     const obj = new returnObject();
     obj.message = MESSAGE.DEVICE_DOES_NOT_EXISTS;
+    obj.registrationId = registrationId;
+    obj.edgeDeviceId = edgeDeviceId
     sendEventToHub(obj);
 }
 
 
+const sendDeviceRegistrationSuccess = (registrationId, edgeDeviceId) => {
+    const obj = new returnObject();
+    obj.message = MESSAGE.GENERIC_SUCCESS;
+    obj.registrationId = registrationId;
+    obj.edgeDeviceId = edgeDeviceId
+    obj.wasSuccessful = true;
+    sendEventToHub(obj);
+}
+
 module.exports = {
     registerDevice,
     sendDeviceDoesNotExist,
+    sendDeviceRegistrationSuccess
 };

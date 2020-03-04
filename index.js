@@ -1,8 +1,9 @@
 "use strict";
 
 const Hapi = require("@hapi/hapi");
+const https = require('https');
 const SocketIO = require('socket.io');
-const {registerDevice, sendDeviceDoesNotExist } = require('./registerDevice');
+const {registerDevice, sendDeviceDoesNotExist, sendDeviceRegistrationSuccess } = require('./registerDevice');
 const { Client } = require('pg')
 
 const init = async () => {
@@ -59,19 +60,6 @@ const init = async () => {
     });
 
     server.route({
-        method: "OPTIONS",
-        path: "/telemetry",
-        handler: (request, h) => {
-            // console.log("--- WEBHOOK OPTIONS:")
-            // console.log("--- HEADERS:")
-            console.log(request.headers)
-            // console.log("--- PAYLOAD:")
-            // console.log(request.payload)
-            return h.response().code(200);
-        }
-    });
-
-    server.route({
         method: "POST",
         path: "/device-registration",
         handler: async (request, h) => {
@@ -82,7 +70,9 @@ const init = async () => {
 
             let client = new Client({ ssl: true });
             await client.connect();
-            const addressAvailableSql = await client.query('SELECT i.id FROM iot_devices i WHERE i.id=$1 AND i.edge_device_id IS NULL AND EXISTS(SELECT e.id FROM edge_devices e WHERE e.id=$2);', [data.address, data.edgeDeviceId]);
+            const addressAvailableSql = await client.query('\
+                SELECT 1 FROM iot_devices i WHERE i.id=$1 AND i.edge_device_id IS NULL AND EXISTS(SELECT e.id FROM edge_devices e WHERE e.id=$2);', 
+                [data.address, data.edgeDeviceId]);
             if(addressAvailableSql.rows.length === 1) {
                 registerDevice(data.address, data.edgeDeviceId).then(async value => {
                     console.log('After registering the device with the callback, the returned values is ', value);
@@ -95,21 +85,13 @@ const init = async () => {
                     }
                 });
             } else {
-                sendDeviceDoesNotExist();
+                const idsMatch = await client.query('SELECT 1 FROM iot_devices i WHERE i.id=$1 and i.edge_device_id=$2', [data.address, data.edgeDeviceId]);
+                if(idsMatch.rows.length === 1) {
+                    sendDeviceRegistrationSuccess(data.address, data.edgeDeviceId);
+                } else {
+                    sendDeviceDoesNotExist(data.address, data.edgeDeviceId);
+                }
             }
-            return h.response().code(200);
-        }
-    });
-
-    server.route({
-        method: "OPTIONS",
-        path: "/device-registration",
-        handler: (request, h) => {
-            // console.log("--- HEADERS:")
-            console.log("--- device-registration OPTIONS:")
-            console.log(request.headers)
-            // console.log("--- PAYLOAD:")
-            // console.log(request.payload)
             return h.response().code(200);
         }
     });
@@ -202,18 +184,16 @@ const init = async () => {
             }
         },
         handler: async (request, h) => {
-            console.log(request.payload);
             const reqPayload = (process.env.EXEC_ENV === 'azure') ? request.payload : JSON.parse(request.payload);
             const base64enc = reqPayload.data.body;
             const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
             const data = JSON.parse(utf8enc);
-            const {iotDeviceId, edgeDeviceId} = data;
-            
+            const {registrationId, edgeDeviceId} = data;
             const response = h.response();
             try {
                 const client = new Client({ ssl: true });
                 await client.connect();
-                const sqlres = await client.query("UPDATE iot_devices SET edge_device_id = $1 WHERE id = $2", [edgeDeviceId, iotDeviceId]);
+                await client.query("UPDATE iot_devices SET edge_device_id = $1 WHERE id = $2", [edgeDeviceId, registrationId]);
                 await client.end();
             }
             catch(ex) {
@@ -223,15 +203,6 @@ const init = async () => {
             }
             response.code(200);
             return response;
-        }
-    });
-
-    server.route({
-        method: "OPTIONS",
-        path: "/api/device-update",
-        handler: (request, h) => {
-            console.log(request.headers)
-            return h.response().code(200);
         }
     });
 
@@ -315,6 +286,35 @@ const init = async () => {
             return response;
         }
     });
+
+    // AUTOMATIC VALIDATION for all Azure IoT Hub Event Subscription endpoints
+    server.route({
+        method: "OPTIONS",
+        path: "/api/{path*}",
+        config: {
+            cors: {
+                "origin": ['*']
+            }
+        },
+        handler: async (request, h) => {
+            if(request.headers["webhook-request-callback"]){
+                console.log("Trying to automatically validate endpoint...");
+                https.get(request.headers["webhook-request-callback"], (resp) => {
+                    resp.on('end', () => {
+                        console.log("AUTOMATIC VALIDATION DONE");
+                    });
+                }).on("error", (err) => {
+                    console.log("Error automatically validating the endpoint");
+                    console.log("Error: " + err.message);
+                    console.log(request.headers);
+                });
+            }
+            const response = h.response();
+            response.code(200);
+            return response;
+        }
+    });
+
 
     await server.start();
     console.log("Server running on %s", server.info.uri);
