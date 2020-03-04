@@ -4,7 +4,10 @@ const Hapi = require("@hapi/hapi");
 const https = require('https');
 const SocketIO = require('socket.io');
 const {registerDevice, sendDeviceDoesNotExist, sendDeviceRegistrationSuccess } = require('./registerDevice');
-const { Client } = require('pg')
+const { Client, Pool } = require('pg')
+
+// Credentials come from env. variable
+const pool = new Pool({ ssl: true });
 
 const init = async () => {
     let data = [];
@@ -42,17 +45,27 @@ const init = async () => {
     server.route({
         method: "POST",
         path: "/telemetry",
-        handler: (request, h) => {
+        handler: async (request, h) => {
             const base64enc = request.payload.data.body;
             const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
             const hookData = JSON.parse(utf8enc);
-            data = hookData;
-            console.log('DATA in TELEMETRY' , data);
+            const {time, address, temperature, humidity, pressure, txpower, rssi, voltage} = hookData;
 
             io.emit('sensorData', {
                 data: hookData
-            })
-            
+            });
+
+            try {
+                const client = new Client({ ssl: true });
+                await client.connect();
+                await client.query('\
+                    INSERT INTO telemetry(time, iot_device_id, temperature, humidity, pressure, txpower, rssi, voltage) \
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [time, address, temperature, humidity, pressure, txpower, rssi, voltage]);
+                await client.end();
+            } catch (ex) {
+                console.log("ERROR inserting telemetry data:", ex);
+            }
+
             const response = h.response();
             response.code(200);
             return response;
@@ -105,13 +118,20 @@ const init = async () => {
             }
         },
         handler: async (request, h) => {
-            const client = new Client({ ssl: true });
-            await client.connect();
-            const sqlres = await client.query("Select id, address, edge_device_id from iot_devices;");
-            await client.end();
-
-            const response = h.response(sqlres.rows);
-            response.code(200)
+            //const client = new Client({ ssl: true });
+            //await client.connect();
+            //const sqlres = await client.query("Select id, address, edge_device_id from iot_devices;");
+            //await client.end();
+            let data;
+            await pool.query('Select id, address, edge_device_id from iot_devices;')
+                .then(res => {
+                    //response = h.response(res.rows);
+                    data = res.rows;
+                })
+                .catch(err => {
+                    //response.data()
+                });
+            const response = h.response(data);
             response.type("application/json");
             return response;
         }
