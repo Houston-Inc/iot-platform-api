@@ -43,7 +43,30 @@ const init = async () => {
 
     server.route({
         method: "POST",
-        path: "/telemetry",
+        path: "/api/telemetry",
+        handler: async (request, h) => {
+            const payload = typeof request.payload === 'object' ? request.payload : JSON.parse(request.payload);
+            const { days, hours, minutes, seconds } = payload.interval; 
+            // start should be in the ISO 8601 format. for eg. 2011-10-10T14:48:00
+            // TODO : Validation for start and maybe other
+
+            try {
+                const sqlRes = await pool.query(`SELECT count(*) FROM TELEMETRY WHERE time > NOW() - interval '$${days} days $${hours} hours $${minutes} minutes $${seconds} seconds';`);
+                return h.response(sqlRes).code(200);
+
+            } catch (ex) {
+                console.log(ex);
+            }
+
+            
+            // SELECT * FROM TELEMETRY WHERE time > payload.start AND time < payload.start + interval '$1 days $2 hours $3 minutes $4 second'
+            return h.response(payload).code(200);
+        }
+    });
+
+    server.route({
+        method: "POST",
+        path: "/webhook/telemetry",
         handler: (request, h) => {
             const base64enc = request.payload.data.body;
             const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
@@ -70,7 +93,7 @@ const init = async () => {
 
     server.route({
         method: "POST",
-        path: "/device-registration",
+        path: "/webhook/device-registration",
         handler: async (request, h) => {
             const reqPayload = (process.env.EXEC_ENV === 'azure') ? request.payload : JSON.parse(request.payload);
             const base64enc = reqPayload.data.body;
@@ -178,7 +201,7 @@ const init = async () => {
 
     server.route({
         method: "POST",
-        path: "/api/device-update",
+        path: "/webhook/device-update",
         config: {
             cors: {
                 "origin": ['*']
