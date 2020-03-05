@@ -37,7 +37,6 @@ const init = async () => {
         method: "GET",
         path: "/addresses",
         handler: (request, reply) => {
-            "use strict";
             return ({ addresses: data.map(({ address }) => address) });
         }
     });
@@ -45,7 +44,7 @@ const init = async () => {
     server.route({
         method: "POST",
         path: "/telemetry",
-        handler: async (request, h) => {
+        handler: (request, h) => {
             const base64enc = request.payload.data.body;
             const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
             const hookData = JSON.parse(utf8enc);
@@ -56,12 +55,9 @@ const init = async () => {
             });
 
             try {
-                const client = new Client({ ssl: true });
-                await client.connect();
-                await client.query('\
+                pool.query('\
                     INSERT INTO telemetry(time, iot_device_id, temperature, humidity, pressure, txpower, rssi, voltage) \
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [time, address, temperature, humidity, pressure, txpower, rssi, voltage]);
-                await client.end();
             } catch (ex) {
                 console.log("ERROR inserting telemetry data:", ex);
             }
@@ -81,9 +77,7 @@ const init = async () => {
             const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
             const data = JSON.parse(utf8enc);
 
-            let client = new Client({ ssl: true });
-            await client.connect();
-            const addressAvailableSql = await client.query('\
+            const addressAvailableSql = await pool.query('\
                 SELECT 1 FROM iot_devices i WHERE i.id=$1 AND i.edge_device_id IS NULL AND EXISTS(SELECT e.id FROM edge_devices e WHERE e.id=$2);', 
                 [data.address, data.edgeDeviceId]);
             if(addressAvailableSql.rows.length === 1) {
@@ -91,14 +85,11 @@ const init = async () => {
                     console.log('After registering the device with the callback, the returned values is ', value);
                     console.log('updating the iot_device in the db');
                     if(value.wasSuccessful) {
-                        client = new Client({ ssl: true });
-                        await client.connect();
-                        const res = await client.query('UPDATE iot_devices SET edge_device_id = $1 WHERE id = $2', [value.edgeDeviceId, value.registrationId]);
-                        await client.end();
+                        await pool.query('UPDATE iot_devices SET edge_device_id = $1 WHERE id = $2', [value.edgeDeviceId, value.registrationId]);
                     }
                 });
             } else {
-                const idsMatch = await client.query('SELECT 1 FROM iot_devices i WHERE i.id=$1 and i.edge_device_id=$2', [data.address, data.edgeDeviceId]);
+                const idsMatch = await pool.query('SELECT 1 FROM iot_devices i WHERE i.id=$1 and i.edge_device_id=$2', [data.address, data.edgeDeviceId]);
                 if(idsMatch.rows.length === 1) {
                     sendDeviceRegistrationSuccess(data.address, data.edgeDeviceId);
                 } else {
@@ -117,13 +108,9 @@ const init = async () => {
                 "origin": ['*']
             }
         },
-        handler: async (request, h) => {
-            //const client = new Client({ ssl: true });
-            //await client.connect();
-            //const sqlres = await client.query("Select id, address, edge_device_id from iot_devices;");
-            //await client.end();
+        handler: (request, h) => {
             let data;
-            await pool.query('Select id, address, edge_device_id from iot_devices;')
+            pool.query('Select id, address, edge_device_id from iot_devices;')
                 .then(res => {
                     //response = h.response(res.rows);
                     data = res.rows;
@@ -145,14 +132,11 @@ const init = async () => {
                 "origin": ['*']
             }
         },
-        handler: async (request, h) => {
+        handler: (request, h) => {
             const {data} = request.payload;
             const response = h.response();
             try {
-                const client = new Client({ ssl: true });
-                await client.connect();
-                const sqlres = await client.query("INSERT INTO iot_devices(id) VALUES($1)", [data]);
-                await client.end();
+                pool.query("INSERT INTO iot_devices(id) VALUES($1)", [data]);
             }
             catch(ex) {
                 console.log(ex);
@@ -176,14 +160,11 @@ const init = async () => {
                 "origin": ['*']
             }
         },
-        handler: async (request, h) => {
+        handler: (request, h) => {
             const {id} = request.payload;
             const response = h.response();
             try {
-                const client = new Client({ ssl: true });
-                await client.connect();
-                const sqlres = await client.query("DELETE FROM iot_devices WHERE ID = $1", [id]);
-                await client.end();
+                pool.query("DELETE FROM iot_devices WHERE ID = $1", [id]);
             }
             catch(ex) {
                 console.log(ex);
@@ -203,7 +184,7 @@ const init = async () => {
                 "origin": ['*']
             }
         },
-        handler: async (request, h) => {
+        handler: (request, h) => {
             const reqPayload = (process.env.EXEC_ENV === 'azure') ? request.payload : JSON.parse(request.payload);
             const base64enc = reqPayload.data.body;
             const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
@@ -211,10 +192,7 @@ const init = async () => {
             const {registrationId, edgeDeviceId} = data;
             const response = h.response();
             try {
-                const client = new Client({ ssl: true });
-                await client.connect();
-                await client.query("UPDATE iot_devices SET edge_device_id = $1 WHERE id = $2", [edgeDeviceId, registrationId]);
-                await client.end();
+                pool.query("UPDATE iot_devices SET edge_device_id = $1 WHERE id = $2", [edgeDeviceId, registrationId]);
             }
             catch(ex) {
                 console.log(ex);
@@ -235,10 +213,7 @@ const init = async () => {
             }
         },
         handler: async (request, h) => {
-            const client = new Client({ ssl: true });
-            await client.connect();
-            const sqlres = await client.query("Select id from edge_devices;");
-            await client.end();
+            const sqlres = await pool.query("Select id from edge_devices;");
 
             const response = h.response(sqlres.rows);
             response.code(200)
@@ -255,15 +230,12 @@ const init = async () => {
                 "origin": ['*']
             }
         },
-        handler: async (request, h) => {
+        handler: (request, h) => {
             const {data} = request.payload;
             const response = h.response();
 
             try {
-                const client = new Client({ ssl: true });
-                await client.connect();
-                const sqlres = await client.query("INSERT INTO edge_devices(id) VALUES($1)", [data]);
-                await client.end();
+                pool.query("INSERT INTO edge_devices(id) VALUES($1)", [data]);
             }
             catch(ex) {
                 console.log(ex);
@@ -288,14 +260,11 @@ const init = async () => {
                 "origin": ['*']
             }
         },
-        handler: async (request, h) => {
+        handler: (request, h) => {
             const {id} = request.payload;
             const response = h.response();
             try {
-                const client = new Client({ ssl: true });
-                await client.connect();
-                const sqlres = await client.query("DELETE FROM edge_devices WHERE ID = $1", [id]);
-                await client.end();
+                pool.query("DELETE FROM edge_devices WHERE ID = $1", [id]);
             }
             catch(ex) {
                 console.log(ex);
@@ -316,7 +285,7 @@ const init = async () => {
                 "origin": ['*']
             }
         },
-        handler: async (request, h) => {
+        handler: (request, h) => {
             if(request.headers["webhook-request-callback"]){
                 console.log("Trying to automatically validate endpoint...");
                 https.get(request.headers["webhook-request-callback"], (resp) => {
