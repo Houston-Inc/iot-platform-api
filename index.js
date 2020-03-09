@@ -51,23 +51,21 @@ const init = async () => {
             // TODO : Validation for start and maybe other
 
             try {
-                const sqlRes = await pool.query(`SELECT count(*) FROM TELEMETRY WHERE time > NOW() - interval '$${days} days $${hours} hours $${minutes} minutes $${seconds} seconds';`);
+                const sqlRes = await pool.query("SELECT count(*) FROM TELEMETRY WHERE time > NOW() - interval '$1 days $2 hours $3 minutes $4 seconds';", [days, hours, minutes, seconds]); // TODO figure out parameters
                 return h.response(sqlRes).code(200);
 
             } catch (ex) {
                 console.log(ex);
+                return h.response().code(400);
             }
 
-            
-            // SELECT * FROM TELEMETRY WHERE time > payload.start AND time < payload.start + interval '$1 days $2 hours $3 minutes $4 second'
-            return h.response(payload).code(200);
         }
     });
 
     server.route({
         method: "POST",
         path: "/webhook/telemetry",
-        handler: (request, h) => {
+        handler: async (request, h) => {
             const base64enc = request.payload.data.body;
             const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
             const hookData = JSON.parse(utf8enc);
@@ -78,16 +76,14 @@ const init = async () => {
             });
 
             try {
-                pool.query('\
+                await pool.query('\
                     INSERT INTO telemetry(time, iot_device_id, temperature, humidity, pressure, txpower, rssi, voltage) \
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [time, address, temperature, humidity, pressure, txpower, rssi, voltage]);
+                return h.response().code(200);
             } catch (ex) {
                 console.log("ERROR inserting telemetry data:", ex);
+                return h.response().code(400);
             }
-
-            const response = h.response();
-            response.code(200);
-            return response;
         }
     });
 
@@ -131,9 +127,9 @@ const init = async () => {
                 "origin": ['*']
             }
         },
-        handler: (request, h) => {
+        handler: async (request, h) => {
             let data;
-            pool.query('Select id, address, edge_device_id from iot_devices;')
+            await pool.query('Select id, address, edge_device_id from iot_devices;')
                 .then(res => {
                     //response = h.response(res.rows);
                     data = res.rows;
@@ -155,11 +151,11 @@ const init = async () => {
                 "origin": ['*']
             }
         },
-        handler: (request, h) => {
+        handler: async (request, h) => {
             const {data} = request.payload;
             const response = h.response();
             try {
-                pool.query("INSERT INTO iot_devices(id) VALUES($1)", [data]);
+                await pool.query("INSERT INTO iot_devices(id) VALUES($1)", [data]);
             }
             catch(ex) {
                 console.log(ex);
@@ -176,6 +172,29 @@ const init = async () => {
     });
 
     server.route({
+        method: "PUT",
+        path: "/api/devices",
+        config: {
+            cors: {
+                "origin": ['*']
+            }
+        },
+        handler: async (request, h) => {
+            const {id} = request.payload;
+            const response = h.response();
+            try {
+                await pool.query("UPDATE iot_devices SET edge_device_id = null WHERE id=$1", [id]);
+            }
+            catch(ex) {
+                response.code(400);
+                return response;
+            }
+            response.code(200);
+            return response;
+        }
+    });
+
+    server.route({
         method: "DELETE",
         path: "/api/devices",
         config: {
@@ -183,11 +202,11 @@ const init = async () => {
                 "origin": ['*']
             }
         },
-        handler: (request, h) => {
+        handler: async (request, h) => {
             const {id} = request.payload;
             const response = h.response();
             try {
-                pool.query("DELETE FROM iot_devices WHERE ID = $1", [id]);
+                await pool.query("DELETE FROM iot_devices WHERE ID = $1", [id]);
             }
             catch(ex) {
                 console.log(ex);
@@ -207,7 +226,7 @@ const init = async () => {
                 "origin": ['*']
             }
         },
-        handler: (request, h) => {
+        handler: async (request, h) => {
             const reqPayload = (process.env.EXEC_ENV === 'azure') ? request.payload : JSON.parse(request.payload);
             const base64enc = reqPayload.data.body;
             const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
@@ -215,7 +234,7 @@ const init = async () => {
             const {registrationId, edgeDeviceId} = data;
             const response = h.response();
             try {
-                pool.query("UPDATE iot_devices SET edge_device_id = $1 WHERE id = $2", [edgeDeviceId, registrationId]);
+                await pool.query("UPDATE iot_devices SET edge_device_id = $1 WHERE id = $2", [edgeDeviceId, registrationId]);
             }
             catch(ex) {
                 console.log(ex);
@@ -253,12 +272,12 @@ const init = async () => {
                 "origin": ['*']
             }
         },
-        handler: (request, h) => {
+        handler: async (request, h) => {
             const {data} = request.payload;
             const response = h.response();
 
             try {
-                pool.query("INSERT INTO edge_devices(id) VALUES($1)", [data]);
+                await pool.query("INSERT INTO edge_devices(id) VALUES($1)", [data]);
             }
             catch(ex) {
                 console.log(ex);
@@ -283,11 +302,11 @@ const init = async () => {
                 "origin": ['*']
             }
         },
-        handler: (request, h) => {
+        handler: async (request, h) => {
             const {id} = request.payload;
             const response = h.response();
             try {
-                pool.query("DELETE FROM edge_devices WHERE ID = $1", [id]);
+                await pool.query("DELETE FROM edge_devices WHERE ID = $1", [id]);
             }
             catch(ex) {
                 console.log(ex);
@@ -302,7 +321,7 @@ const init = async () => {
     // AUTOMATIC VALIDATION for all Azure IoT Hub Event Subscription endpoints
     server.route({
         method: "OPTIONS",
-        path: "/api/{path*}",
+        path: "/webhook/{path*}",
         config: {
             cors: {
                 "origin": ['*']
@@ -321,8 +340,8 @@ const init = async () => {
                     console.log(request.headers);
                 });
             }
-            const response = h.response();
-            response.code(200);
+            const response = h.response("Allow: OPTIONS, GET, HEAD, POST");
+            response.code(204);
             return response;
         }
     });
