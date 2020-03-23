@@ -10,7 +10,7 @@ const { provisioningHost, idScope, primaryKey, serviceConnectionString } = requi
 
 const mockRegister = process.env.MOCKREGISTER;
 
-const EDGE_DEVICE_MODULE = "Gateway";
+const EDGE_DEVICE_MODULE = "RuuviTagGateway";
 const EDGE_DEVICE_METHOD = "DeviceRegistrationAttempted";
 
 const iotHubClient = IotHubClient.fromConnectionString(serviceConnectionString, iotHubTransport);
