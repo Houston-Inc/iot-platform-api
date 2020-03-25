@@ -7,7 +7,11 @@ const {registerDevice, sendDeviceDoesNotExist, sendDeviceRegistrationSuccess } =
 const { Client, Pool } = require('pg')
 
 // Credentials come from env. variable
-const pool = new Pool({ ssl: true });
+const pool = new Pool({
+    ssl: {
+        rejectUnauthorized: true
+    }
+});
 
 const init = async () => {
     let data = [];
