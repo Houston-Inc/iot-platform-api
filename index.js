@@ -66,8 +66,9 @@ const init = async () => {
         method: "POST",
         path: "/webhook/telemetry",
         handler: async (request, h) => {
+            console.log("POST: /webhook/telemetry");
             const base64enc = request.payload.data.body;
-            const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
+            const utf8enc = (new Buffer.from(base64enc, 'base64')).toString('utf8');
             const hookData = JSON.parse(utf8enc);
             const {time, address, temperature, humidity, pressure, txpower, rssi, voltage} = hookData;
 
@@ -91,9 +92,10 @@ const init = async () => {
         method: "POST",
         path: "/webhook/device-registration",
         handler: async (request, h) => {
+            console.log("POST: /webhook/device-registration");
             const reqPayload = (process.env.EXEC_ENV === 'azure') ? request.payload : JSON.parse(request.payload);
             const base64enc = reqPayload.data.body;
-            const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
+            const utf8enc = (new Buffer.from(base64enc, 'base64')).toString('utf8');
             const data = JSON.parse(utf8enc);
 
             const addressAvailableSql = await pool.query('\
@@ -227,9 +229,10 @@ const init = async () => {
             }
         },
         handler: async (request, h) => {
+            console.log("POST: /webhook/device-update");
             const reqPayload = (process.env.EXEC_ENV === 'azure') ? request.payload : JSON.parse(request.payload);
             const base64enc = reqPayload.data.body;
-            const utf8enc = (new Buffer(base64enc, 'base64')).toString('utf8');
+            const utf8enc = (new Buffer.from(base64enc, 'base64')).toString('utf8');
             const data = JSON.parse(utf8enc);
             const {registrationId, edgeDeviceId} = data;
             const response = h.response();
@@ -330,17 +333,11 @@ const init = async () => {
         handler: (request, h) => {
             if(request.headers["webhook-request-callback"]){
                 console.log("Trying to automatically validate endpoint...");
-                https.get(request.headers["webhook-request-callback"], (resp) => {
-                    resp.on('end', () => {
-                        console.log("AUTOMATIC VALIDATION DONE");
-                    });
-                }).on("error", (err) => {
-                    console.log("Error automatically validating the endpoint");
-                    console.log("Error: " + err.message);
-                    console.log(request.headers);
-                });
+                console.log(request.headers);
+
+                callValidationUrl(request.headers["webhook-request-callback"])
             }
-            const response = h.response("Allow: OPTIONS, GET, HEAD, POST");
+            const response = h.response();
             response.code(204);
             return response;
         }
@@ -350,6 +347,19 @@ const init = async () => {
     await server.start();
     console.log("Server running on %s", server.info.uri);
 };
+
+const callValidationUrl = (callBackUrl) => {
+    setTimeout(() => {
+        https.get(callBackUrl, (resp) => {
+            resp.on('data', () => {
+                console.log("Got response from validation url:", callBackUrl);
+            });
+        }).on("error", (err) => {
+            console.log("Error automatically validating the endpoint:", callBackUrl);
+            console.log(err.message);
+        });
+    }, 5000);
+}
 
 process.on("unhandledRejection", err => {
     console.log(err);

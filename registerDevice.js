@@ -13,6 +13,8 @@ const { provisioningHost, idScope, primaryKey, dpsConnectionString, edgeDeviceCo
 
 const mockRegister = process.env.MOCKREGISTER;
 
+const apiDeviceHubClient = Client.fromConnectionString(edgeDeviceConnectionString, iotHubTransport);
+
 const computeDerivedSymmetricKey = (masterKey, regId) => {
     return crypto
         .createHmac("SHA256", Buffer.from(masterKey, "base64"))
@@ -137,10 +139,8 @@ const doRegister = (provisioningClient, symmetricKey, baseReturnObject) => {
     });
 };
 
-
 const sendEventToHub = (deviceState) => {
     console.log('send event to hub with the device state : ', deviceState);
-    const apiDeviceHubClient = Client.fromConnectionString(edgeDeviceConnectionString, iotHubTransport);
     const message = new Message(JSON.stringify(deviceState));
     message.properties.add("type", "DeviceRegistrationAttempted");
 
