@@ -1,15 +1,19 @@
 const iotHubTransport = require("azure-iot-device-mqtt").Mqtt;
 const Client = require("azure-iot-device").Client;
-const Message = require("azure-iot-device").Message;
+const IotHubClient = require('azure-iothub').Client;
 const crypto = require("crypto");
 const ProvisioningTransport = require("azure-iot-provisioning-device-mqtt").Mqtt;
-const SymmetricKeySecurityClient = require("azure-iot-security-symmetric-key")
-    .SymmetricKeySecurityClient;
+const SymmetricKeySecurityClient = require("azure-iot-security-symmetric-key").SymmetricKeySecurityClient;
 const ProvisioningDeviceClient = require("azure-iot-provisioning-device").ProvisioningDeviceClient;
-const provisioningServiceClient = require("azure-iot-provisioning-service")
-    .ProvisioningServiceClient;
 
-const { provisioningHost, idScope, primaryKey, dpsConnectionString, edgeDeviceConnectionString } = require("./dpsSettings.json");
+const { provisioningHost, idScope, primaryKey, serviceConnectionString } = require("./dpsSettings.json");
+
+const mockRegister = process.env.MOCKREGISTER;
+
+const EDGE_DEVICE_MODULE = "RuuviTagGateway";
+const EDGE_DEVICE_METHOD = "DeviceRegistrationAttempted";
+
+const iotHubClient = IotHubClient.fromConnectionString(serviceConnectionString, iotHubTransport);
 
 const computeDerivedSymmetricKey = (masterKey, regId) => {
     return crypto
@@ -18,30 +22,31 @@ const computeDerivedSymmetricKey = (masterKey, regId) => {
         .digest("base64");
 };
 
+class returnObject {
+    constructor(){
+        this.wasSuccessful = false;
+        this.registrationId = null;
+        this.edgeDeviceId = null;
+        this.message = MESSAGE.DEVICE_REGISTRATION_FAILURE;
+        this.deviceTwin = {};
+    }
+}
+
 const MESSAGE = {
     "TWIN_VALUE_FAILURE" : "Error retreiving twin value",
     "DEVICE_EXISTS" : "Device already exists",
     "DEVICE_REGISTRATION_FAILURE": "Error registering the device",
     "HUB_CONNECTION_ERROR": "Error connecting to IoT Hub",
     "SENDING_HUB_MESSAGE_ERROR": "Error sending message to IoT Hub",
-    "GENERIC_SUCCESS": "Registeration successful"
+    "DEVICE_DOES_NOT_EXISTS": "IoT or Edge Device does not exists in database or IoT device is already assigned.",
+    "GENERIC_SUCCESS": "Registration successful"
 }
-
-const baseReturnObject = {
-    wasSuccessful: false,
-    registerationId: null,
-    edgeDeviceId: null,
-    message: MESSAGE.DEVICE_REGISTRATION_FAILURE,
-    deviceTwin: {}
-}
-
-let apiDeviceHubClient = Client.fromConnectionString(edgeDeviceConnectionString, iotHubTransport);
-
 
 const registerDevice = async (registrationId, edgeDeviceId) => {
-    baseReturnObject.registerationId = registrationId;
+    const baseReturnObject = new returnObject();
+
+    baseReturnObject.registrationId = registrationId;
     baseReturnObject.edgeDeviceId = edgeDeviceId;
-    const serviceClient = provisioningServiceClient.fromConnectionString(dpsConnectionString);
     const symmetricKey = computeDerivedSymmetricKey(primaryKey, registrationId);
     const provisioningSecurityClient = new SymmetricKeySecurityClient(registrationId, symmetricKey);
     const provisioningClient = ProvisioningDeviceClient.create(
@@ -51,45 +56,48 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
         provisioningSecurityClient
     );
 
-    let deviceState;
+    return new Promise( async(resolve, reject) => {
+        if (mockRegister) {
+            baseReturnObject.wasSuccessful = true;
+            console.log("MOCKING REGISTRATION: ", baseReturnObject);
+            invokeDirectMethod(edgeDeviceId, EDGE_DEVICE_MODULE, EDGE_DEVICE_METHOD, baseReturnObject)
+                .then(result => {
+                    resolve(baseReturnObject);
+                })
+                .catch(err => {
+                    console.log("error mock register: ", err);
+                });
+        } else {
+            const registerResult = await doRegister(
+                provisioningClient,
+                symmetricKey,
+                baseReturnObject
+            );
 
-    serviceClient.getDeviceRegistrationState(registrationId)
-        .then(res => {
-            const response = baseReturnObject;
-            response.message = MESSAGE.DEVICE_EXISTS;
-            deviceState = response;
-        })
-        .catch(async err => {
-            console.log("errr?");
-            console.log(err.responseBody);
-            const error = JSON.parse(err.responseBody);
-
-            if (error.message === "Registration not found.") {
-                const registerResult = await doRegister(provisioningClient, symmetricKey);
-                console.log("registerresult: ", registerResult);
-                deviceState = registerResult;
-            } else {
-                console.log("err1");
-                deviceState = baseReturnObject;
-                // return err.responseBody;
-            }
-        }).finally(()=>{
-            sendEventToHub(deviceState)
-        });
-    return deviceState;
+            console.log("Sending register device");
+            invokeDirectMethod(edgeDeviceId, EDGE_DEVICE_MODULE, EDGE_DEVICE_METHOD, registerResult)
+                .then(result => {
+                    resolve(registerResult);
+                })
+                .catch(err => {
+                    console.log(err);
+                    reject(err);
+                });
+        }
+    });
 };
 
-
-const doRegister = (provisioningClient, symmetricKey) => {
+const doRegister = (provisioningClient, symmetricKey, baseReturnObject) => {
     return new Promise((resolve, reject) => {
         provisioningClient.register((err, result) => {
             if (err) {
-                console.log("error registering device: " + err);
                 reject(baseReturnObject);
             } else {
-                console.log("result: ");
-                console.log(result);
 
+                
+                //TODO DO DATABASE UPDATE HERE
+
+                
                 const connectionString =
                     "HostName=" +
                     result.assignedHub +
@@ -97,33 +105,27 @@ const doRegister = (provisioningClient, symmetricKey) => {
                     result.deviceId +
                     ";SharedAccessKey=" +
                     symmetricKey;
-
-                hubClient = Client.fromConnectionString(connectionString, iotHubTransport);
-
+                const hubClient = Client.fromConnectionString(connectionString, iotHubTransport);
                 hubClient.open(err => {
                     if (err) {
-                        console.error("Could not connect: " + err.message);
-                        const response = baseReturnObject;
-                        response.message = MESSAGE.HUB_CONNECTION_ERROR;
-                        reject(response);
+                        baseReturnObject.message = MESSAGE.HUB_CONNECTION_ERROR;
+                        reject(baseReturnObject);
                     } else {
                         // DEVICE TWIN
                         const getTwinPromise = new Promise((resl, rej) => {
                             hubClient.getTwin((err, twin) => {
                                 if (err) {
                                     console.error("error getting twin: " + err);
-                                    const response = baseReturnObject;
-                                    response.message = MESSAGE.TWIN_VALUE_FAILURE;
-                                    rej(response);
+                                    baseReturnObject.message = MESSAGE.TWIN_VALUE_FAILURE;
+                                    rej(baseReturnObject);
                                 }
                                 // Output the current properties
                                 console.log("Device twin content:");
                                 console.log(twin.properties);
-                                const response = baseReturnObject;
-                                response.message = MESSAGE.GENERIC_SUCCESS;
-                                response.wasSuccessful = true;
-                                response.deviceTwin = twin.properties.desired;
-                                resl(response);
+                                baseReturnObject.message = MESSAGE.GENERIC_SUCCESS;
+                                baseReturnObject.wasSuccessful = true;
+                                baseReturnObject.deviceTwin = twin.properties.desired;
+                                resl(baseReturnObject);
                             });
                         });
 
@@ -138,27 +140,63 @@ const doRegister = (provisioningClient, symmetricKey) => {
     });
 };
 
+const invokeDirectMethod = (edgeDeviceId, moduleId, method, payload) => {
+    console.log('Invoking direct method ' + method + ' on device ' + edgeDeviceId);
 
-const sendEventToHub = (deviceState) => {
-    const message = new Message(JSON.stringify(deviceState));
-    message.properties.add("type", "DeviceRegistrationAttempted");
-    apiDeviceHubClient.sendEvent(message, (err, res) => {
-        if (err) {
-            console.log(
-                "Error sending registration message: " + err.toString()
-            );
-            const response = baseReturnObject;
-            response.message = MESSAGE.SENDING_HUB_MESSAGE_ERROR;
-        }
+    const methodParams = {
+        methodName: method,
+        payload: payload,
+        responseTimeoutInSeconds: 30
+    };
 
-        if (res) {
-            console.log("Sent registration message", res);
-            const response = baseReturnObject;
-            response.message = MESSAGE.GENERIC_SUCCESS;
-            response.wasSuccessful = true;
-        }
-        apiDeviceHubClient.close();                            
+    return new Promise((resolve, reject) => {
+        iotHubClient.invokeDeviceMethod(edgeDeviceId, moduleId, methodParams, function (err, result) {
+            if (err) {
+                console.error('Failed to invoke method '  + method + ': ' + err.message);
+                reject(err);
+            } else {
+                console.log('Method ' + method + ' invoked succesfully');
+                resolve(payload);
+            }
+        });
     })
 }
 
-module.exports = registerDevice;
+const sendDeviceDoesNotExist = (registrationId, edgeDeviceId) => {
+    const obj = new returnObject();
+    obj.message = MESSAGE.DEVICE_DOES_NOT_EXISTS;
+    obj.registrationId = registrationId;
+    obj.edgeDeviceId = edgeDeviceId
+
+    console.log("Sending device does not exist");
+    invokeDirectMethod(edgeDeviceId, EDGE_DEVICE_MODULE, EDGE_DEVICE_METHOD, obj)
+        .then(result => {
+            console.log(result);
+        })
+        .catch(err => {
+            console.log(err);
+        });
+}
+
+const sendDeviceRegistrationSuccess = (registrationId, edgeDeviceId) => {
+    const obj = new returnObject();
+    obj.message = MESSAGE.GENERIC_SUCCESS;
+    obj.registrationId = registrationId;
+    obj.edgeDeviceId = edgeDeviceId
+    obj.wasSuccessful = true;
+
+    console.log("Sending device registration success");
+    invokeDirectMethod(edgeDeviceId, EDGE_DEVICE_MODULE, EDGE_DEVICE_METHOD, obj)
+        .then(result => {
+            console.log(result);
+        })
+        .catch(err => {
+            console.log(err);
+        });
+}
+
+module.exports = {
+    registerDevice,
+    sendDeviceDoesNotExist,
+    sendDeviceRegistrationSuccess
+};
