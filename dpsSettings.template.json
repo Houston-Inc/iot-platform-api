@@ -1,6 +1,0 @@
-{
-    "provisioningHost": "global.azure-devices-provisioning.net",
-    "idScope": "",
-    "primaryKey": "",
-    "serviceConnectionString": ""
-}

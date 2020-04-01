@@ -6,8 +6,10 @@ const ProvisioningTransport = require("azure-iot-provisioning-device-mqtt").Mqtt
 const SymmetricKeySecurityClient = require("azure-iot-security-symmetric-key").SymmetricKeySecurityClient;
 const ProvisioningDeviceClient = require("azure-iot-provisioning-device").ProvisioningDeviceClient;
 
-const { provisioningHost, idScope, primaryKey, serviceConnectionString } = require("./dpsSettings.json");
-
+const provisioningHost = process.env.PROVISIONING_HOST;
+const idScope = process.env.ID_SCOPE;
+const primaryKey = process.env.PRIMARY_KEY;
+const serviceConnectionString = process.env.SERVICE_CONNECTION_STRING;
 const mockRegister = process.env.MOCKREGISTER;
 
 const EDGE_DEVICE_MODULE = "RuuviTagGateway";
