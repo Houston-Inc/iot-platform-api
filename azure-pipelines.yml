@@ -49,6 +49,8 @@ stages:
     variables: 
       versionNumber: $[ dependencies.getVersionNumber.outputs['getVersionNumber.version'] ]
     steps:
+    - checkout: self
+      persistCredentials: true
     - bash: |
         git config --global user.name "BuildService"
         git config --global user.email "BuildService@houston-inc.com"
