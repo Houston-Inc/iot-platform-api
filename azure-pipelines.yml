@@ -54,4 +54,5 @@ stages:
         git config --global user.email "BuildService@houston-inc.com"
         git tag -a $(versionNumber) -m "new version $(versionNumber)" 
         git tag
+        git push --follow-tags
       name: gitTagVersion
