@@ -41,3 +41,15 @@ stages:
         containerRegistry: $(dockerRegistryServiceConnection)
         tags: |
           $(versionNumber)
+  - job: Tag
+    displayName: Git tag version number
+    dependsOn: getVersionNumber
+    pool:
+      vmImage: 'ubuntu-latest'
+    variables: 
+      versionNumber: $[ dependencies.getVersionNumber.outputs['getVersionNumber.version'] ]
+    steps:
+    - bash: |
+        git tag -a $(versionNumber) -m "new version $(versionNumber)" 
+        git tag
+      name: gitTagVersion
