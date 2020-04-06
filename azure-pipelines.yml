@@ -49,6 +49,8 @@ stages:
     variables: 
       versionNumber: $[ dependencies.getVersionNumber.outputs['getVersionNumber.version'] ]
     steps:
+    - checkout: self
+      persistCredentials: true
     - bash: |
         git tag -a $(versionNumber) -m "new version $(versionNumber)" 
         git tag
