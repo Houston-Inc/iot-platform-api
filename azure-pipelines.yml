@@ -3,7 +3,7 @@
 # https://docs.microsoft.com/azure/devops/pipelines/languages/docker
 
 trigger:
-- master
+- development
 
 resources:
 - repo: self
@@ -41,3 +41,20 @@ stages:
         containerRegistry: $(dockerRegistryServiceConnection)
         tags: |
           $(versionNumber)
+  - job: Tag
+    displayName: Git tag version number
+    dependsOn: getVersionNumber
+    pool:
+      vmImage: 'ubuntu-latest'
+    variables: 
+      versionNumber: $[ dependencies.getVersionNumber.outputs['getVersionNumber.version'] ]
+    steps:
+    - checkout: self
+      persistCredentials: true
+    - bash: |
+        git config --global user.name "BuildService"
+        git config --global user.email "BuildService@houston-inc.com"
+        git tag -a $(versionNumber) -m "new version $(versionNumber)" 
+        git tag
+        git push origin $(versionNumber)
+      name: gitTagVersion
