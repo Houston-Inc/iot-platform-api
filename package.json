@@ -23,6 +23,7 @@
     "azure-iot-provisioning-service": "^1.7.2",
     "azure-iot-security-symmetric-key": "^1.6.2",
     "azure-iothub": "1.12.0",
+    "dotenv": "^8.2.0",
     "pg": "^7.18.2",
     "socket.io": "^2.3.0"
   },

@@ -14,7 +14,6 @@ const mockRegister = process.env.MOCKREGISTER;
 
 const EDGE_DEVICE_MODULE = "RuuviTagGateway";
 const EDGE_DEVICE_METHOD = "DeviceRegistrationAttempted";
-
 const iotHubClient = IotHubClient.fromConnectionString(serviceConnectionString, iotHubTransport);
 
 const computeDerivedSymmetricKey = (masterKey, regId) => {

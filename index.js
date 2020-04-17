@@ -1,10 +1,18 @@
 "use strict";
+require('dotenv').config()
 
 const Hapi = require("@hapi/hapi");
 const https = require('https');
-const SocketIO = require('socket.io');
+const { Pool } = require('pg')
+
 const {registerDevice, sendDeviceDoesNotExist, sendDeviceRegistrationSuccess } = require('./registerDevice');
-const { Client, Pool } = require('pg')
+const io = require('./io')
+
+const server = Hapi.server({
+    port: process.env.PORT || 3001,
+    host: "0.0.0.0"
+});
+io.initialize(server);
 
 // Credentials come from env. variable
 const pool = new Pool({
@@ -15,20 +23,7 @@ const pool = new Pool({
 
 const init = async () => {
     let data = [];
-
-    const server = Hapi.server({
-        port: process.env.PORT || 3001,
-        host: "0.0.0.0"
-    });
-
-    const io = SocketIO.listen(server.listener);
-
-    io.sockets.on('connection', (socket) => {
-        socket.emit('sensorData', {
-            data
-        })
-    });
-
+    
     server.route({
         method: "GET",
         path: "/",
@@ -62,7 +57,6 @@ const init = async () => {
                 console.log(ex);
                 return h.response().code(400);
             }
-
         }
     });
 
@@ -75,11 +69,12 @@ const init = async () => {
             const utf8enc = (new Buffer.from(base64enc, 'base64')).toString('utf8');
             const hookData = JSON.parse(utf8enc);
             const {time, address, temperature, humidity, pressure, txpower, rssi, voltage} = hookData;
-
-            io.emit('sensorData', {
-                data: hookData
-            });
-
+            const data = {};
+            data[address] = {
+                telemetry: hookData,
+                level: request.payload.data.properties.level,
+            };
+            io.sendDeviceData(address, data[address]);
             try {
                 await pool.query('\
                     INSERT INTO telemetry(time, iot_device_id, temperature, humidity, pressure, txpower, rssi, voltage) \
