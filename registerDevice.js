@@ -24,18 +24,17 @@ const computeDerivedSymmetricKey = (masterKey, regId) => {
 };
 
 class returnObject {
-    constructor(){
+    constructor() {
         this.wasSuccessful = false;
         this.registrationId = null;
         this.edgeDeviceId = null;
         this.message = MESSAGE.DEVICE_REGISTRATION_FAILURE;
-        this.deviceTwin = {};
     }
 }
 
 const MESSAGE = {
-    "TWIN_VALUE_FAILURE" : "Error retreiving twin value",
-    "DEVICE_EXISTS" : "Device already exists",
+    "TWIN_VALUE_FAILURE": "Error retreiving twin value",
+    "DEVICE_EXISTS": "Device already exists",
     "DEVICE_REGISTRATION_FAILURE": "Error registering the device",
     "HUB_CONNECTION_ERROR": "Error connecting to IoT Hub",
     "SENDING_HUB_MESSAGE_ERROR": "Error sending message to IoT Hub",
@@ -57,12 +56,12 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
         provisioningSecurityClient
     );
 
-    return new Promise( async(resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
         if (mockRegister) {
             baseReturnObject.wasSuccessful = true;
             console.log("MOCKING REGISTRATION: ", baseReturnObject);
             invokeDirectMethod(edgeDeviceId, EDGE_DEVICE_MODULE, EDGE_DEVICE_METHOD, baseReturnObject)
-                .then(result => {
+                .then(_ => {
                     resolve(baseReturnObject);
                 })
                 .catch(err => {
@@ -71,13 +70,12 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
         } else {
             const registerResult = await doRegister(
                 provisioningClient,
-                symmetricKey,
                 baseReturnObject
             );
 
             console.log("Sending register device");
             invokeDirectMethod(edgeDeviceId, EDGE_DEVICE_MODULE, EDGE_DEVICE_METHOD, registerResult)
-                .then(result => {
+                .then(_ => {
                     resolve(registerResult);
                 })
                 .catch(err => {
@@ -88,54 +86,15 @@ const registerDevice = async (registrationId, edgeDeviceId) => {
     });
 };
 
-const doRegister = (provisioningClient, symmetricKey, baseReturnObject) => {
+const doRegister = (provisioningClient, baseReturnObject) => {
     return new Promise((resolve, reject) => {
-        provisioningClient.register((err, result) => {
+        provisioningClient.register((err, _) => {
             if (err) {
                 reject(baseReturnObject);
             } else {
-
-                
-                //TODO DO DATABASE UPDATE HERE
-
-                
-                const connectionString =
-                    "HostName=" +
-                    result.assignedHub +
-                    ";DeviceId=" +
-                    result.deviceId +
-                    ";SharedAccessKey=" +
-                    symmetricKey;
-                const hubClient = Client.fromConnectionString(connectionString, iotHubTransport);
-                hubClient.open(err => {
-                    if (err) {
-                        baseReturnObject.message = MESSAGE.HUB_CONNECTION_ERROR;
-                        reject(baseReturnObject);
-                    } else {
-                        // DEVICE TWIN
-                        const getTwinPromise = new Promise((resl, rej) => {
-                            hubClient.getTwin((err, twin) => {
-                                if (err) {
-                                    console.error("error getting twin: " + err);
-                                    baseReturnObject.message = MESSAGE.TWIN_VALUE_FAILURE;
-                                    rej(baseReturnObject);
-                                }
-                                // Output the current properties
-                                console.log("Device twin content:");
-                                console.log(twin.properties);
-                                baseReturnObject.message = MESSAGE.GENERIC_SUCCESS;
-                                baseReturnObject.wasSuccessful = true;
-                                baseReturnObject.deviceTwin = twin.properties.desired;
-                                resl(baseReturnObject);
-                            });
-                        });
-
-                        getTwinPromise.then((getTwin) => { 
-                            hubClient.close();
-                            resolve(getTwin); 
-                        })
-                    }
-                });
+                baseReturnObject.message = MESSAGE.GENERIC_SUCCESS;
+                baseReturnObject.wasSuccessful = true;
+                resolve(baseReturnObject);
             }
         });
     });
@@ -151,9 +110,9 @@ const invokeDirectMethod = (edgeDeviceId, moduleId, method, payload) => {
     };
 
     return new Promise((resolve, reject) => {
-        iotHubClient.invokeDeviceMethod(edgeDeviceId, moduleId, methodParams, function (err, result) {
+        iotHubClient.invokeDeviceMethod(edgeDeviceId, moduleId, methodParams, function (err, _) {
             if (err) {
-                console.error('Failed to invoke method '  + method + ': ' + err.message);
+                console.error('Failed to invoke method ' + method + ': ' + err.message);
                 reject(err);
             } else {
                 console.log('Method ' + method + ' invoked succesfully');
